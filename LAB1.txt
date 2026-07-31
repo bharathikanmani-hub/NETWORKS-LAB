@@ -1,0 +1,168 @@
+1) MAXIMUM XOR OF TWO NUMBERS IN A ARRAY
+
+#include <stdio.h>
+#include <stdlib.h>
+
+// Define the Trie Node structure
+typedef struct TrieNode {
+    struct TrieNode* child[2];
+} TrieNode;
+
+// Helper to create a new Trie Node
+TrieNode* createNode() {
+    TrieNode* node = (TrieNode*)malloc(sizeof(TrieNode));
+    node->child[0] = NULL;
+    node->child[1] = NULL;
+    return node;
+}
+
+// Insert a number into the Trie bit by bit (from 31st to 0th bit)
+void insert(TrieNode* root, int num) {
+    TrieNode* curr = root;
+    for (int i = 30; i >= 0; i--) {
+        int bit = (num >> i) & 1;
+        if (!curr->child[bit]) {
+            curr->child[bit] = createNode();
+        }
+        curr = curr->child[bit];
+    }
+}
+
+// Find the maximum XOR for a given number using the Trie
+int getMaxXOR(TrieNode* root, int num) {
+    TrieNode* curr = root;
+    int current_xor = 0;
+    for (int i = 30; i >= 0; i--) {
+        int bit = (num >> i) & 1;
+        int toggle_bit = 1 - bit; // We want the opposite bit to maximize XOR
+        
+        if (curr->child[toggle_bit]) {
+            current_xor |= (1 << i); // If opposite bit exists, this position results in 1
+            curr = curr->child[toggle_bit];
+        } else {
+            curr = curr->child[bit]; // Otherwise, we have to take the same bit (results in 0)
+        }
+    }
+    return current_xor;
+}
+
+// Free memory allocated for the Trie
+void freeTrie(TrieNode* root) {
+    if (!root) return;
+    freeTrie(root->child[0]);
+    freeTrie(root->child[1]);
+    free(root);
+}
+
+// Main function to find the maximum XOR in the array
+int findMaximumXOR(int* nums, int numsSize) {
+    if (numsSize < 2) return 0;
+    
+    TrieNode* root = createNode();
+    int maxXOR = 0;
+    
+    // Step 1: Insert all numbers into the Trie
+    for (int i = 0; i < numsSize; i++) {
+        insert(root, nums[i]);
+    }
+    
+    // Step 2: Find the max XOR for each number and track the maximum
+    for (int i = 0; i < numsSize; i++) {
+        int currentMax = getMaxXOR(root, nums[i]);
+        if (currentMax > maxXOR) {
+            maxXOR = currentMax;
+        }
+    }
+    
+    // Step 3: Clean up memory
+    freeTrie(root);
+    
+    return maxXOR;
+}
+
+
+2) COUNTING BITS
+
+/**
+ * Note: The returned array must be malloced, assume caller calls free().
+ */
+// int* countBits(int n, int* returnSize) {
+#include <stdlib.h>
+
+/**
+ * Note: The returned array must be malloced, assume caller calls free().
+ */
+int* countBits(int n, int* returnSize) {
+    // Set the size of the output array
+    *returnSize = n + 1;
+    
+    // Allocate memory for the result array
+    int* ans = (int*)malloc((*returnSize) * sizeof(int));
+    if (ans == NULL) {
+        return NULL; // Handle memory allocation failure
+    }
+    
+    // Base case
+    ans[0] = 0;
+    
+    // Fill the array using the DP relation
+    for (int i = 1; i <= n; i++) {
+        ans[i] = ans[i >> 1] + (i & 1);
+    }
+    
+    return ans;
+}
+
+
+3) NUMBER COMPLIMENT
+
+int findComplement(int num) {
+    unsigned int mask = ~0; 
+    while (num & mask) {
+        mask <<= 1;
+    }
+    return ~num & ~mask;
+}
+
+
+4) PATTERN MATCHING
+
+//bool hasMatch(char* s, char* p) {
+#include <stdbool.h>
+#include <string.h>
+
+bool hasMatch(char* s, char* p) {
+    // Find the position of the asterisk '*' in the pattern
+    char* star = strchr(p, '*');
+    
+    // Calculate the length of the prefix (part before '*')
+    int prefixLen = star - p;
+    
+    // The suffix starts right after the asterisk
+    char* suffix = star + 1;
+    int suffixLen = strlen(suffix);
+    
+    int sLen = strlen(s);
+    
+    // Iterate through 's' to find the earliest valid match for the prefix
+    for (int i = 0; i <= sLen - prefixLen; i++) {
+        // Check if prefix matches at the current position 'i'
+        if (strncmp(s + i, p, prefixLen) == 0) {
+            
+            // Check if suffix matches anywhere in the remaining substring
+            // The suffix must start at or after (i + prefixLen)
+            for (int j = i + prefixLen; j <= sLen - suffixLen; j++) {
+                if (strncmp(s + j, suffix, suffixLen) == 0) {
+                    return true;
+                }
+            }
+            
+            // Greedy optimization: Finding the *first* occurrence of prefix 
+            // is always optimal because it leaves the maximum room for the suffix.
+            // If the suffix couldn't match here, it won't match if we push the prefix further right.
+            break;
+        }
+    }
+    
+    return false;
+}

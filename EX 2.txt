@@ -1,0 +1,110 @@
+problem 898
+
+#include <stdlib.h>
+class Solution {
+public:
+    //int subarrayBitwiseORs(vector<int>& arr) {
+      //  #include <stdlib.h>
+
+int cmp(const void *a, const void *b) {
+    return (*(int *)a - *(int *)b);
+}
+
+int subarrayBitwiseORs(int* arr, int arrSize) {
+    int *prev = (int *)malloc(32 * sizeof(int));
+    int prevSize = 0;
+
+    int *curr = (int *)malloc(32 * sizeof(int));
+
+    int *ans = (int *)malloc(arrSize * 32 * sizeof(int));
+    int ansSize = 0;
+
+    for (int i = 0; i < arrSize; i++) {
+        int currSize = 0;
+
+        curr[currSize++] = arr[i];
+
+        for (int j = 0; j < prevSize; j++) {
+            int val = prev[j] | arr[i];
+
+            if (curr[currSize - 1] != val)
+                curr[currSize++] = val;
+        }
+
+        for (int j = 0; j < currSize; j++)
+            ans[ansSize++] = curr[j];
+
+        int *temp = prev;
+        prev = curr;
+        curr = temp;
+        prevSize = currSize;
+    }
+
+    qsort(ans, ansSize, sizeof(int), cmp);
+
+    int count = 0;
+    for (int i = 0; i < ansSize; i++) {
+        if (i == 0 || ans[i] != ans[i - 1])
+            count++;
+    }
+
+    free(prev);
+    free(curr);
+    free(ans);
+
+    return count;
+}
+};
+
+
+problem 67
+
+char* addBinary(char* a, char* b) {
+    int lenA = strlen(a);
+    int lenB = strlen(b);
+    int maxLen = (lenA > lenB) ? lenA : lenB;
+
+    char *result = (char *)malloc(maxLen + 2);
+
+    int i = lenA - 1;
+    int j = lenB - 1;
+    int k = maxLen;
+    result[maxLen + 1] = '\0';
+
+    int carry = 0;
+
+    while (i >= 0 || j >= 0 || carry) {
+        int sum = carry;
+
+        if (i >= 0)
+            sum += a[i--] - '0';
+
+        if (j >= 0)
+            sum += b[j--] - '0';
+
+        result[k--] = (sum % 2) + '0';
+        carry = sum / 2;
+    }
+
+    return result + k + 1;
+}
+
+problem 693
+
+bool hasAlternatingBits(int n) {
+    int prev = n & 1;   // Last bit
+    n = n >> 1;
+
+    while (n > 0) {
+        int curr = n & 1;
+
+        if (curr == prev)
+            return false;
+
+        prev = curr;
+        n = n >> 1;
+    }
+
+    return true;
+}
+

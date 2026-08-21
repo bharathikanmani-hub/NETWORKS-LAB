@@ -1,0 +1,359 @@
+LEETCODE 815 - BUS ROUTES
+
+DESCRIPTION:
+
+You are given several bus routes. Each route contains the bus stops
+that the bus visits.
+
+You start from a source stop and need to reach a target stop.
+
+Return the minimum number of buses required to reach the target.
+If the target cannot be reached, return -1.
+
+EXAMPLE:
+
+Input:
+routes = [[1,2,7],[3,6,7]]
+source = 1
+target = 6
+
+Output:
+2
+
+EXPLANATION:
+
+Take the first bus from stop 1 to stop 7.
+Then take the second bus from stop 7 to stop 6.
+
+Therefore, minimum buses = 2.
+
+APPROACH:
+
+Use BFS because we need the minimum number of buses.
+
+1. Start BFS from the source stop.
+2. Find all buses containing the current stop.
+3. Visit all stops of those buses.
+4. Mark buses and stops as visited.
+5. Continue until the target is found.
+6. The BFS level represents the number of buses taken.
+
+CODE:
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
+int numBusesToDestination(int** routes, int routesSize,
+                          int* routesColSize, int source, int target)
+{
+    int i, j;
+
+    if (source == target)
+        return 0;
+
+    int maxStop = 1000000;
+
+    bool *visitedStop = calloc(maxStop + 1, sizeof(bool));
+    bool *visitedBus = calloc(routesSize, sizeof(bool));
+
+    int *queue = malloc((maxStop + 1) * sizeof(int));
+
+    int front = 0;
+    int rear = 0;
+
+    queue[rear++] = source;
+    visitedStop[source] = true;
+
+    int buses = 0;
+
+    while (front < rear)
+    {
+        int levelSize = rear - front;
+
+        buses++;
+
+        while (levelSize--)
+        {
+            int stop = queue[front++];
+
+            for (i = 0; i < routesSize; i++)
+            {
+                if (visitedBus[i])
+                    continue;
+
+                bool found = false;
+
+                for (j = 0; j < routesColSize[i]; j++)
+                {
+                    if (routes[i][j] == stop)
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                    continue;
+
+                visitedBus[i] = true;
+
+                for (j = 0; j < routesColSize[i]; j++)
+                {
+                    int nextStop = routes[i][j];
+
+                    if (nextStop == target)
+                    {
+                        free(visitedStop);
+                        free(visitedBus);
+                        free(queue);
+
+                        return buses;
+                    }
+
+                    if (!visitedStop[nextStop])
+                    {
+                        visitedStop[nextStop] = true;
+                        queue[rear++] = nextStop;
+                    }
+                }
+            }
+        }
+    }
+
+    free(visitedStop);
+    free(visitedBus);
+    free(queue);
+
+    return -1;
+}
+
+
+EXPLANATION:
+
+BFS starts from the source stop.
+
+For every stop, we check which bus routes contain that stop.
+
+Once a bus route is selected, all its stops can be reached using
+that bus.
+
+We mark the bus as visited so that we do not process the same bus
+again.
+
+The first time we reach the target, we have found the minimum number
+of buses because BFS always explores level by level.
+
+TIME COMPLEXITY:
+
+O(number of routes × number of stops)
+
+SPACE COMPLEXITY:
+
+O(number of stops + number of routes)
+
+
+LEETCODE 1466 - REORDER ROUTES TO MAKE ALL PATHS LEAD TO THE CITY ZERO
+
+DESCRIPTION:
+
+There are n cities numbered from 0 to n-1.
+
+There are n-1 directed roads.
+
+Each connection [a,b] means that the road currently goes from
+city a to city b.
+
+We need to reverse the minimum number of roads so that every city
+can reach city 0.
+
+EXAMPLE:
+
+Input:
+n = 6
+connections = [[0,1],[1,3],[2,3],[4,0],[4,5]]
+
+Output:
+3
+
+APPROACH:
+
+Use DFS.
+
+For every original road:
+
+a -> b
+
+Store two edges:
+
+a -> b with cost 1
+b -> a with cost 0
+
+Cost 1 means that the road must be reversed.
+
+Cost 0 means that the road already points in the required direction.
+
+Start DFS from city 0 and add the cost of every edge that needs
+to be reversed.
+
+CODE:
+
+#include <stdio.h>
+#include <stdlib.h>
+
+typedef struct Node
+{
+    int city;
+    int cost;
+    struct Node *next;
+} Node;
+
+void addEdge(Node **graph, int from, int to, int cost)
+{
+    Node *newNode = (Node *)malloc(sizeof(Node));
+
+    newNode->city = to;
+    newNode->cost = cost;
+    newNode->next = graph[from];
+
+    graph[from] = newNode;
+}
+
+void dfs(Node **graph, int city, int *visited, int *answer)
+{
+    Node *temp = graph[city];
+
+    visited[city] = 1;
+
+    while (temp != NULL)
+    {
+        if (!visited[temp->city])
+        {
+            *answer += temp->cost;
+
+            dfs(graph, temp->city, visited, answer);
+        }
+
+        temp = temp->next;
+    }
+}
+
+int minReorder(int n, int** connections, int connectionsSize,
+               int* connectionsColSize)
+{
+    Node **graph = (Node **)calloc(n, sizeof(Node *));
+
+    int i;
+
+    for (i = 0; i < connectionsSize; i++)
+    {
+        int a = connections[i][0];
+        int b = connections[i][1];
+
+        addEdge(graph, a, b, 1);
+        addEdge(graph, b, a, 0);
+    }
+
+    int *visited = (int *)calloc(n, sizeof(int));
+
+    int answer = 0;
+
+    dfs(graph, 0, visited, &answer);
+
+    for (i = 0; i < n; i++)
+    {
+        Node *temp = graph[i];
+
+        while (temp != NULL)
+        {
+            Node *next = temp->next;
+
+            free(temp);
+
+            temp = next;
+        }
+    }
+
+    free(graph);
+    free(visited);
+
+    return answer;
+}
+
+
+EXPLANATION:
+
+Consider a road:
+
+0 -> 1
+
+If we start from city 0 and move towards city 1, the road is already
+in the correct direction for reaching all cities from city 0.
+
+But when building the graph for DFS, we assign:
+
+0 -> 1 : cost 1
+1 -> 0 : cost 0
+
+The cost tells us whether the original road has to be reversed.
+
+DFS starts from city 0.
+
+Whenever it encounters an edge with cost 1, it adds 1 to the answer.
+
+Therefore, the final answer is the minimum number of roads that need
+to be reversed.
+
+TIME COMPLEXITY:
+
+O(n)
+
+SPACE COMPLEXITY:
+
+O(n)
+
+
+LEETCODE 743 - NETWORK DELAY TIME
+
+DESCRIPTION:
+
+You are given n nodes and directed edges.
+
+Each edge is represented as:
+
+[u, v, w]
+
+This means a signal takes w units of time to travel from node u
+to node v.
+
+A signal starts from node k.
+
+Find the time required for all nodes to receive the signal.
+
+If some node cannot receive the signal, return -1.
+
+EXAMPLE:
+
+Input:
+times = [[2,1,1],[2,3,1],[3,4,1]]
+n = 4
+k = 2
+
+Output:
+2
+
+EXPLANATION:
+
+The signal starts at node 2.
+
+2 -> 1 = 1
+2 -> 3 = 1
+3 -> 4 = 1
+
+Therefore:
+
+Node 1 receives the signal at time 1.
+Node 3 receives the signal at time 1.
+Node 4 receives the signal at time 2.
+
+The maximum time is 2.

@@ -1,0 +1,937 @@
+Online Railway Reservation System – Iterative TCP
+
+server.c
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <time.h>
+
+#define PORT 8080
+#define MAX 512
+
+struct Train
+{
+    int id;
+    char name[30];
+    char from[20];
+    char to[20];
+    int seats;
+    int fare;
+};
+
+struct Booking
+{
+    int id;
+    int train;
+    char name[30];
+    int seats;
+    int active;
+};
+
+struct Train t[3] =
+{
+    {101, "ChennaiExpress", "Chennai", "Coimbatore", 10, 250},
+    {102, "PandianExpress", "Madurai", "Chennai", 15, 300},
+    {103, "CheranExpress", "Coimbatore", "Chennai", 20, 280}
+};
+
+struct Booking b[100];
+
+int count = 0;
+int booking_id = 1001;
+
+void log_activity(char *msg)
+{
+    FILE *fp = fopen("railway_log.txt", "a");
+
+    if (fp != NULL)
+    {
+        time_t now = time(NULL);
+        fprintf(fp, "%s : %s", msg, ctime(&now));
+        fclose(fp);
+    }
+}
+
+void send_msg(int sock, char *msg)
+{
+    char buffer[2048];
+
+    snprintf(buffer, sizeof(buffer), "%s\n", msg);
+
+    send(sock, buffer, strlen(buffer), 0);
+}
+
+void receive_msg(int sock, char *msg)
+{
+    int i = 0;
+    char ch;
+
+    while (i < MAX - 1)
+    {
+        if (recv(sock, &ch, 1, 0) <= 0)
+        {
+            msg[i] = '\0';
+            return;
+        }
+
+        if (ch == '\n')
+            break;
+
+        msg[i++] = ch;
+    }
+
+    msg[i] = '\0';
+}
+
+void handle_client(int sock)
+{
+    char buffer[MAX], response[2048];
+    int choice, id, seats, i, found;
+
+    send_msg(sock, "ONLINE RAILWAY RESERVATION SYSTEM");
+
+    while (1)
+    {
+        receive_msg(sock, buffer);
+
+        if (buffer[0] == '\0')
+            break;
+
+        sscanf(buffer, "%d", &choice);
+
+        if (choice == 1)
+        {
+            strcpy(response, "AVAILABLE TRAINS:\n");
+
+            for (i = 0; i < 3; i++)
+            {
+                char temp[150];
+
+                sprintf(temp,
+                    "Train ID: %d | %s | %s to %s | Fare: Rs.%d\n",
+                    t[i].id, t[i].name, t[i].from,
+                    t[i].to, t[i].fare);
+
+                strcat(response, temp);
+            }
+
+            send_msg(sock, response);
+        }
+
+        else if (choice == 2)
+        {
+            sscanf(buffer, "%d %d", &choice, &id);
+
+            found = 0;
+
+            for (i = 0; i < 3; i++)
+            {
+                if (t[i].id == id)
+                {
+                    sprintf(response,
+                        "Available Seats in Train %d: %d",
+                        id, t[i].seats);
+
+                    found = 1;
+                    break;
+                }
+            }
+
+            if (!found)
+                strcpy(response, "Invalid Train ID");
+
+            send_msg(sock, response);
+        }
+
+        else if (choice == 3)
+        {
+            char name[30];
+
+            sscanf(buffer, "%d %d %29s %d",
+                   &choice, &id, name, &seats);
+
+            found = 0;
+
+            for (i = 0; i < 3; i++)
+            {
+                if (t[i].id == id)
+                {
+                    found = 1;
+                    break;
+                }
+            }
+
+            if (!found || seats <= 0 || count >= 100)
+            {
+                strcpy(response, "Invalid booking request");
+            }
+            else if (t[i].seats < seats)
+            {
+                strcpy(response, "Not enough seats available");
+            }
+            else
+            {
+                t[i].seats -= seats;
+
+                b[count].id = booking_id;
+                b[count].train = id;
+                b[count].seats = seats;
+                strcpy(b[count].name, name);
+                b[count].active = 1;
+
+                sprintf(response,
+                    "Booking Successful! Booking ID: %d",
+                    booking_id);
+
+                char logmsg[100];
+
+                sprintf(logmsg,
+                    "Ticket booked by %s. Booking ID: %d",
+                    name, booking_id);
+
+                log_activity(logmsg);
+
+                booking_id++;
+                count++;
+            }
+
+            send_msg(sock, response);
+        }
+
+        else if (choice == 4)
+        {
+            sscanf(buffer, "%d %d", &choice, &id);
+
+            found = 0;
+
+            for (i = 0; i < count; i++)
+            {
+                if (b[i].id == id && b[i].active)
+                {
+                    for (int j = 0; j < 3; j++)
+                    {
+                        if (t[j].id == b[i].train)
+                        {
+                            t[j].seats += b[i].seats;
+                            break;
+                        }
+                    }
+
+                    b[i].active = 0;
+
+                    strcpy(response, "Reservation Cancelled Successfully");
+
+                    log_activity("Ticket cancellation completed");
+
+                    found = 1;
+                    break;
+                }
+            }
+
+            if (!found)
+                strcpy(response, "Invalid Booking ID");
+
+            send_msg(sock, response);
+        }
+
+        else if (choice == 5)
+        {
+            sscanf(buffer, "%d %d", &choice, &id);
+
+            found = 0;
+
+            for (i = 0; i < count; i++)
+            {
+                if (b[i].id == id)
+                {
+                    if (b[i].active)
+                        sprintf(response,
+                            "Booking ID: %d | Name: %s | Train: %d | Seats: %d | CONFIRMED",
+                            b[i].id, b[i].name,
+                            b[i].train, b[i].seats);
+                    else
+                        strcpy(response, "Booking Cancelled");
+
+                    found = 1;
+                    break;
+                }
+            }
+
+            if (!found)
+                strcpy(response, "Booking Not Found");
+
+            send_msg(sock, response);
+        }
+
+        else if (choice == 6)
+        {
+            send_msg(sock, "THANK YOU FOR USING RAILWAY RESERVATION");
+            break;
+        }
+
+        else
+        {
+            send_msg(sock, "Invalid Choice");
+        }
+    }
+
+    close(sock);
+    printf("Client disconnected.\n");
+}
+
+int main()
+{
+    int server, client;
+    struct sockaddr_in addr;
+    int opt = 1;
+
+    server = socket(AF_INET, SOCK_STREAM, 0);
+
+    setsockopt(server, SOL_SOCKET, SO_REUSEADDR,
+               &opt, sizeof(opt));
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(PORT);
+    addr.sin_addr.s_addr = INADDR_ANY;
+
+    bind(server, (struct sockaddr *)&addr, sizeof(addr));
+
+    listen(server, 5);
+
+    printf("Railway Reservation Server Started...\n");
+
+    while (1)
+    {
+        client = accept(server, NULL, NULL);
+
+        printf("Client Connected...\n");
+
+        handle_client(client);
+    }
+
+    close(server);
+    return 0;
+}
+
+
+client.c
+
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8080
+#define MAX 512
+
+void send_msg(int sock, char *msg)
+{
+    char buffer[MAX];
+
+    snprintf(buffer, sizeof(buffer), "%s\n", msg);
+
+    send(sock, buffer, strlen(buffer), 0);
+}
+
+void receive_msg(int sock, char *msg)
+{
+    int i = 0;
+    char ch;
+
+    while (i < 2047)
+    {
+        if (recv(sock, &ch, 1, 0) <= 0)
+        {
+            msg[i] = '\0';
+            return;
+        }
+
+        if (ch == '\n')
+            break;
+
+        msg[i++] = ch;
+    }
+
+    msg[i] = '\0';
+}
+
+int main()
+{
+    int sock, choice, id, seats;
+    struct sockaddr_in server;
+
+    char ip[20], buffer[MAX], response[2048];
+    char name[30];
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    printf("Enter Server IP: ");
+    scanf("%19s", ip);
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(PORT);
+
+    inet_pton(AF_INET, ip, &server.sin_addr);
+
+    connect(sock, (struct sockaddr *)&server, sizeof(server));
+
+    receive_msg(sock, response);
+    printf("\n%s\n", response);
+
+    while (1)
+    {
+        printf("\n1. Search Trains");
+        printf("\n2. Check Seat Availability");
+        printf("\n3. Book Tickets");
+        printf("\n4. Cancel Reservation");
+        printf("\n5. View Booking Status");
+        printf("\n6. Exit");
+
+        printf("\nEnter Choice: ");
+        scanf("%d", &choice);
+
+        if (choice == 1)
+        {
+            sprintf(buffer, "1");
+        }
+
+        else if (choice == 2)
+        {
+            printf("Enter Train ID: ");
+            scanf("%d", &id);
+
+            sprintf(buffer, "2 %d", id);
+        }
+
+        else if (choice == 3)
+        {
+            printf("Enter Train ID: ");
+            scanf("%d", &id);
+
+            printf("Enter Passenger Name: ");
+            scanf("%29s", name);
+
+            printf("Enter Number of Seats: ");
+            scanf("%d", &seats);
+
+            sprintf(buffer, "3 %d %s %d",
+                    id, name, seats);
+        }
+
+        else if (choice == 4)
+        {
+            printf("Enter Booking ID: ");
+            scanf("%d", &id);
+
+            sprintf(buffer, "4 %d", id);
+        }
+
+        else if (choice == 5)
+        {
+            printf("Enter Booking ID: ");
+            scanf("%d", &id);
+
+            sprintf(buffer, "5 %d", id);
+        }
+
+        else if (choice == 6)
+        {
+            sprintf(buffer, "6");
+            send_msg(sock, buffer);
+
+            receive_msg(sock, response);
+            printf("\n%s\n", response);
+
+            break;
+        }
+
+        else
+        {
+            printf("Invalid Choice\n");
+            continue;
+        }
+
+        send_msg(sock, buffer);
+
+        receive_msg(sock, response);
+
+        printf("\nSERVER RESPONSE: %s\n", response);
+    }
+
+    close(sock);
+    return 0;
+}
+
+
+Hospital Appointment Management System – Iterative TCP
+
+server.c
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <time.h>
+
+#define PORT 8081
+#define MAX 512
+
+struct Doctor
+{
+    int id;
+    char name[30];
+    char specialization[30];
+    int slots;
+};
+
+struct Appointment
+{
+    int id;
+    int doctor;
+    char patient[30];
+    int active;
+};
+
+struct Doctor d[3] =
+{
+    {101, "Arun", "Cardiology", 5},
+    {102, "Priya", "Neurology", 4},
+    {103, "Kumar", "Orthopedic", 6}
+};
+
+struct Appointment a[100];
+
+int count = 0;
+int appointment_id = 2001;
+
+void log_activity(char *msg)
+{
+    FILE *fp = fopen("hospital_log.txt", "a");
+
+    if (fp != NULL)
+    {
+        time_t now = time(NULL);
+        fprintf(fp, "%s : %s", msg, ctime(&now));
+        fclose(fp);
+    }
+}
+
+void send_msg(int sock, char *msg)
+{
+    char buffer[2048];
+
+    snprintf(buffer, sizeof(buffer), "%s\n", msg);
+
+    send(sock, buffer, strlen(buffer), 0);
+}
+
+void receive_msg(int sock, char *msg)
+{
+    int i = 0;
+    char ch;
+
+    while (i < MAX - 1)
+    {
+        if (recv(sock, &ch, 1, 0) <= 0)
+        {
+            msg[i] = '\0';
+            return;
+        }
+
+        if (ch == '\n')
+            break;
+
+        msg[i++] = ch;
+    }
+
+    msg[i] = '\0';
+}
+
+void handle_client(int sock)
+{
+    char buffer[MAX], response[2048];
+    int choice, id, i, found;
+
+    send_msg(sock, "HOSPITAL APPOINTMENT MANAGEMENT SYSTEM");
+
+    while (1)
+    {
+        receive_msg(sock, buffer);
+
+        if (buffer[0] == '\0')
+            break;
+
+        sscanf(buffer, "%d", &choice);
+
+        if (choice == 1)
+        {
+            strcpy(response, "AVAILABLE DOCTORS:\n");
+
+            for (i = 0; i < 3; i++)
+            {
+                char temp[150];
+
+                sprintf(temp,
+                    "Doctor ID: %d | Dr.%s | %s | Available Slots: %d\n",
+                    d[i].id, d[i].name,
+                    d[i].specialization, d[i].slots);
+
+                strcat(response, temp);
+            }
+
+            send_msg(sock, response);
+        }
+
+        else if (choice == 2)
+        {
+            sscanf(buffer, "%d %d", &choice, &id);
+
+            found = 0;
+
+            for (i = 0; i < 3; i++)
+            {
+                if (d[i].id == id)
+                {
+                    sprintf(response,
+                        "Dr.%s - Available Appointment Slots: %d",
+                        d[i].name, d[i].slots);
+
+                    found = 1;
+                    break;
+                }
+            }
+
+            if (!found)
+                strcpy(response, "Invalid Doctor ID");
+
+            send_msg(sock, response);
+        }
+
+        else if (choice == 3)
+        {
+            char name[30];
+
+            sscanf(buffer, "%d %d %29s",
+                   &choice, &id, name);
+
+            found = 0;
+
+            for (i = 0; i < 3; i++)
+            {
+                if (d[i].id == id)
+                {
+                    found = 1;
+                    break;
+                }
+            }
+
+            if (!found || count >= 100)
+            {
+                strcpy(response, "Invalid Doctor ID");
+            }
+            else if (d[i].slots <= 0)
+            {
+                strcpy(response, "No Appointment Slots Available");
+            }
+            else
+            {
+                d[i].slots--;
+
+                a[count].id = appointment_id;
+                a[count].doctor = id;
+                strcpy(a[count].patient, name);
+                a[count].active = 1;
+
+                sprintf(response,
+                    "Appointment Booked Successfully! Appointment ID: %d",
+                    appointment_id);
+
+                char logmsg[100];
+
+                sprintf(logmsg,
+                    "Appointment booked by %s. ID: %d",
+                    name, appointment_id);
+
+                log_activity(logmsg);
+
+                appointment_id++;
+                count++;
+            }
+
+            send_msg(sock, response);
+        }
+
+        else if (choice == 4)
+        {
+            sscanf(buffer, "%d %d", &choice, &id);
+
+            found = 0;
+
+            for (i = 0; i < count; i++)
+            {
+                if (a[i].id == id && a[i].active)
+                {
+                    for (int j = 0; j < 3; j++)
+                    {
+                        if (d[j].id == a[i].doctor)
+                        {
+                            d[j].slots++;
+                            break;
+                        }
+                    }
+
+                    a[i].active = 0;
+
+                    strcpy(response,
+                        "Appointment Cancelled Successfully");
+
+                    log_activity("Appointment cancelled");
+
+                    found = 1;
+                    break;
+                }
+            }
+
+            if (!found)
+                strcpy(response, "Invalid Appointment ID");
+
+            send_msg(sock, response);
+        }
+
+        else if (choice == 5)
+        {
+            char name[30];
+
+            sscanf(buffer, "%d %29s", &choice, name);
+
+            found = 0;
+            strcpy(response, "APPOINTMENT HISTORY:\n");
+
+            for (i = 0; i < count; i++)
+            {
+                if (strcmp(a[i].patient, name) == 0)
+                {
+                    char temp[150];
+
+                    sprintf(temp,
+                        "Appointment ID: %d | Doctor ID: %d | Status: %s\n",
+                        a[i].id, a[i].doctor,
+                        a[i].active ? "CONFIRMED" : "CANCELLED");
+
+                    strcat(response, temp);
+                    found = 1;
+                }
+            }
+
+            if (!found)
+                strcpy(response, "No Appointment History Found");
+
+            send_msg(sock, response);
+        }
+
+        else if (choice == 6)
+        {
+            send_msg(sock, "THANK YOU FOR VISITING");
+
+            break;
+        }
+
+        else
+        {
+            send_msg(sock, "Invalid Choice");
+        }
+    }
+
+    close(sock);
+
+    printf("Client disconnected.\n");
+}
+
+int main()
+{
+    int server, client, opt = 1;
+    struct sockaddr_in addr;
+
+    server = socket(AF_INET, SOCK_STREAM, 0);
+
+    setsockopt(server, SOL_SOCKET, SO_REUSEADDR,
+               &opt, sizeof(opt));
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(PORT);
+    addr.sin_addr.s_addr = INADDR_ANY;
+
+    bind(server, (struct sockaddr *)&addr, sizeof(addr));
+
+    listen(server, 5);
+
+    printf("Hospital Appointment Server Started...\n");
+
+    while (1)
+    {
+        client = accept(server, NULL, NULL);
+
+        printf("Client Connected...\n");
+
+        handle_client(client);
+    }
+
+    close(server);
+    return 0;
+}
+
+
+client.c
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8081
+#define MAX 512
+
+void send_msg(int sock, char *msg)
+{
+    char buffer[MAX];
+
+    snprintf(buffer, sizeof(buffer), "%s\n", msg);
+
+    send(sock, buffer, strlen(buffer), 0);
+}
+
+void receive_msg(int sock, char *msg)
+{
+    int i = 0;
+    char ch;
+
+    while (i < 2047)
+    {
+        if (recv(sock, &ch, 1, 0) <= 0)
+        {
+            msg[i] = '\0';
+            return;
+        }
+
+        if (ch == '\n')
+            break;
+
+        msg[i++] = ch;
+    }
+
+    msg[i] = '\0';
+}
+
+int main()
+{
+    int sock, choice, id;
+    struct sockaddr_in server;
+
+    char ip[20], buffer[MAX], response[2048];
+    char name[30];
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    printf("Enter Server IP: ");
+    scanf("%19s", ip);
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(PORT);
+
+    inet_pton(AF_INET, ip, &server.sin_addr);
+
+    connect(sock, (struct sockaddr *)&server, sizeof(server));
+
+    receive_msg(sock, response);
+
+    printf("\n%s\n", response);
+
+    while (1)
+    {
+        printf("\n1. View Doctors");
+        printf("\n2. Check Doctor Availability");
+        printf("\n3. Book Appointment");
+        printf("\n4. Cancel Appointment");
+        printf("\n5. View Appointment History");
+        printf("\n6. Exit");
+
+        printf("\nEnter Choice: ");
+        scanf("%d", &choice);
+
+        if (choice == 1)
+        {
+            sprintf(buffer, "1");
+        }
+
+        else if (choice == 2)
+        {
+            printf("Enter Doctor ID: ");
+            scanf("%d", &id);
+
+            sprintf(buffer, "2 %d", id);
+        }
+
+        else if (choice == 3)
+        {
+            printf("Enter Doctor ID: ");
+            scanf("%d", &id);
+
+            printf("Enter Patient Name: ");
+            scanf("%29s", name);
+
+            sprintf(buffer, "3 %d %s", id, name);
+        }
+
+        else if (choice == 4)
+        {
+            printf("Enter Appointment ID: ");
+            scanf("%d", &id);
+
+            sprintf(buffer, "4 %d", id);
+        }
+
+        else if (choice == 5)
+        {
+            printf("Enter Patient Name: ");
+            scanf("%29s", name);
+
+            sprintf(buffer, "5 %s", name);
+        }
+
+        else if (choice == 6)
+        {
+            sprintf(buffer, "6");
+
+            send_msg(sock, buffer);
+
+            receive_msg(sock, response);
+
+            printf("\n%s\n", response);
+
+            break;
+        }
+
+        else
+        {
+            printf("Invalid Choice\n");
+            continue;
+        }
+
+        send_msg(sock, buffer);
+
+        receive_msg(sock, response);
+
+        printf("\nSERVER RESPONSE:\n%s\n", response);
+    }
+
+    close(sock);
+
+    return 0;
+}

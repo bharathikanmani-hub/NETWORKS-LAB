@@ -1,0 +1,708 @@
+Online Examination Management System
+
+Server program – server.c
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <arpa/inet.h>
+#include <time.h>
+
+#define PORT 8080
+#define MAX 100
+
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+void log_activity(char *msg)
+{
+    FILE *fp = fopen("exam_log.txt", "a");
+    if (fp != NULL)
+    {
+        time_t t = time(NULL);
+        fprintf(fp, "%s : %s", msg, ctime(&t));
+        fclose(fp);
+    }
+}
+
+void send_msg(int sock, char *msg)
+{
+    char buffer[MAX];
+    snprintf(buffer, sizeof(buffer), "%s\n", msg);
+    send(sock, buffer, strlen(buffer), 0);
+}
+
+void receive_msg(int sock, char *msg)
+{
+    int i = 0;
+    char ch;
+
+    while (i < MAX - 1)
+    {
+        if (recv(sock, &ch, 1, 0) <= 0)
+        {
+            msg[i] = '\0';
+            return;
+        }
+
+        if (ch == '\n')
+            break;
+
+        msg[i++] = ch;
+    }
+
+    msg[i] = '\0';
+}
+
+void *client_handler(void *arg)
+{
+    int sock = *(int *)arg;
+    free(arg);
+
+    char buffer[MAX], username[30], password[30];
+    int logged = 0, a, b, c, score;
+
+    send_msg(sock, "ONLINE EXAMINATION SYSTEM");
+    receive_msg(sock, buffer);
+
+    sscanf(buffer, "%29s %29s", username, password);
+
+    if ((strcmp(username, "student1") == 0 &&
+         strcmp(password, "1234") == 0) ||
+        (strcmp(username, "student2") == 0 &&
+         strcmp(password, "5678") == 0))
+    {
+        logged = 1;
+        send_msg(sock, "LOGIN SUCCESSFUL");
+        log_activity(username);
+    }
+    else
+    {
+        send_msg(sock, "INVALID LOGIN");
+    }
+
+    if (logged)
+    {
+        while (1)
+        {
+            receive_msg(sock, buffer);
+
+            if (strcmp(buffer, "1") == 0)
+            {
+                send_msg(sock,
+                "Q1: Which language is used for system programming? "
+                "1.Java 2.C 3.Python");
+
+                send_msg(sock,
+                "Q2: Which protocol is connection oriented? "
+                "1.UDP 2.IP 3.TCP");
+
+                send_msg(sock,
+                "Q3: Which function creates a thread? "
+                "1.pthread_create 2.fork 3.socket");
+            }
+            else if (strcmp(buffer, "2") == 0)
+            {
+                receive_msg(sock, buffer);
+                sscanf(buffer, "%d %d %d", &a, &b, &c);
+
+                score = 0;
+
+                if (a == 2) score++;
+                if (b == 3) score++;
+                if (c == 1) score++;
+
+                pthread_mutex_lock(&lock);
+
+                char logmsg[100];
+                snprintf(logmsg, sizeof(logmsg),
+                         "%s submitted exam. Score: %d/3",
+                         username, score);
+                log_activity(logmsg);
+
+                pthread_mutex_unlock(&lock);
+
+                sprintf(buffer, "YOUR FINAL SCORE: %d/3", score);
+                send_msg(sock, buffer);
+            }
+            else if (strcmp(buffer, "3") == 0)
+            {
+                send_msg(sock, "THANK YOU");
+                break;
+            }
+            else
+            {
+                send_msg(sock, "INVALID OPTION");
+            }
+        }
+    }
+
+    close(sock);
+    return NULL;
+}
+
+int main()
+{
+    int server, client;
+    struct sockaddr_in addr;
+    pthread_t tid;
+
+    server = socket(AF_INET, SOCK_STREAM, 0);
+
+    int opt = 1;
+    setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(PORT);
+    addr.sin_addr.s_addr = INADDR_ANY;
+
+    bind(server, (struct sockaddr *)&addr, sizeof(addr));
+    listen(server, 5);
+
+    printf("Online Examination Server Started...\n");
+
+    while (1)
+    {
+        client = accept(server, NULL, NULL);
+
+        int *p = malloc(sizeof(int));
+        *p = client;
+
+        pthread_create(&tid, NULL, client_handler, p);
+        pthread_detach(tid);
+
+        printf("New student connected...\n");
+    }
+
+    close(server);
+    return 0;
+}
+
+
+client.c
+
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8080
+#define MAX 100
+
+void send_msg(int sock, char *msg)
+{
+    char buffer[MAX];
+    snprintf(buffer, sizeof(buffer), "%s\n", msg);
+    send(sock, buffer, strlen(buffer), 0);
+}
+
+void receive_msg(int sock, char *msg)
+{
+    int i = 0;
+    char ch;
+
+    while (i < MAX - 1)
+    {
+        if (recv(sock, &ch, 1, 0) <= 0)
+        {
+            msg[i] = '\0';
+            return;
+        }
+
+        if (ch == '\n')
+            break;
+
+        msg[i++] = ch;
+    }
+
+    msg[i] = '\0';
+}
+
+int main()
+{
+    int sock;
+    struct sockaddr_in server;
+    char ip[20], buffer[MAX];
+    int choice;
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    printf("Enter Server IP: ");
+    scanf("%19s", ip);
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(PORT);
+    inet_pton(AF_INET, ip, &server.sin_addr);
+
+    connect(sock, (struct sockaddr *)&server, sizeof(server));
+
+    receive_msg(sock, buffer);
+    printf("\n%s\n", buffer);
+
+    char username[30], password[30];
+
+    printf("Username: ");
+    scanf("%29s", username);
+
+    printf("Password: ");
+    scanf("%29s", password);
+
+    sprintf(buffer, "%s %s", username, password);
+    send_msg(sock, buffer);
+
+    receive_msg(sock, buffer);
+    printf("%s\n", buffer);
+
+    if (strcmp(buffer, "LOGIN SUCCESSFUL") != 0)
+    {
+        close(sock);
+        return 0;
+    }
+
+    while (1)
+    {
+        printf("\n1. View Questions");
+        printf("\n2. Submit Answers");
+        printf("\n3. Exit");
+        printf("\nEnter Choice: ");
+        scanf("%d", &choice);
+
+        sprintf(buffer, "%d", choice);
+        send_msg(sock, buffer);
+
+        if (choice == 1)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                receive_msg(sock, buffer);
+                printf("\n%s\n", buffer);
+            }
+        }
+        else if (choice == 2)
+        {
+            int a, b, c;
+
+            printf("Enter Answer for Q1 (1/2/3): ");
+            scanf("%d", &a);
+
+            printf("Enter Answer for Q2 (1/2/3): ");
+            scanf("%d", &b);
+
+            printf("Enter Answer for Q3 (1/2/3): ");
+            scanf("%d", &c);
+
+            sprintf(buffer, "%d %d %d", a, b, c);
+            send_msg(sock, buffer);
+
+            receive_msg(sock, buffer);
+            printf("\n%s\n", buffer);
+        }
+        else if (choice == 3)
+        {
+            receive_msg(sock, buffer);
+            printf("%s\n", buffer);
+            break;
+        }
+        else
+        {
+            receive_msg(sock, buffer);
+            printf("%s\n", buffer);
+        }
+    }
+
+    close(sock);
+    return 0;
+}
+Hotel Reservation System
+
+server.c
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <arpa/inet.h>
+#include <time.h>
+
+#define PORT 8081
+#define MAX 100
+#define ROOMS 5
+
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+int booked[ROOMS] = {0};
+char customer[ROOMS][30];
+
+void send_msg(int sock, char *msg)
+{
+    char buffer[MAX];
+    snprintf(buffer, sizeof(buffer), "%s\n", msg);
+    send(sock, buffer, strlen(buffer), 0);
+}
+
+void receive_msg(int sock, char *msg)
+{
+    int i = 0;
+    char ch;
+
+    while (i < MAX - 1)
+    {
+        if (recv(sock, &ch, 1, 0) <= 0)
+        {
+            msg[i] = '\0';
+            return;
+        }
+
+        if (ch == '\n')
+            break;
+
+        msg[i++] = ch;
+    }
+
+    msg[i] = '\0';
+}
+
+void save_booking()
+{
+    FILE *fp = fopen("bookings.txt", "w");
+
+    if (fp == NULL)
+        return;
+
+    for (int i = 0; i < ROOMS; i++)
+    {
+        if (booked[i])
+            fprintf(fp, "%d %s\n", i + 101, customer[i]);
+    }
+
+    fclose(fp);
+}
+
+void load_booking()
+{
+    FILE *fp = fopen("bookings.txt", "r");
+    int room;
+    char name[30];
+
+    if (fp == NULL)
+        return;
+
+    while (fscanf(fp, "%d %29s", &room, name) == 2)
+    {
+        if (room >= 101 && room <= 105)
+        {
+            booked[room - 101] = 1;
+            strcpy(customer[room - 101], name);
+        }
+    }
+
+    fclose(fp);
+}
+
+void log_activity(char *msg)
+{
+    FILE *fp = fopen("hotel_log.txt", "a");
+
+    if (fp != NULL)
+    {
+        time_t t = time(NULL);
+        fprintf(fp, "%s : %s", msg, ctime(&t));
+        fclose(fp);
+    }
+}
+
+void *client_handler(void *arg)
+{
+    int sock = *(int *)arg;
+    free(arg);
+
+    char buffer[MAX], name[30];
+    int choice, room, i;
+
+    send_msg(sock, "HOTEL RESERVATION SYSTEM");
+
+    while (1)
+    {
+        receive_msg(sock, buffer);
+
+        if (strcmp(buffer, "5") == 0)
+        {
+            send_msg(sock, "THANK YOU");
+            break;
+        }
+
+        pthread_mutex_lock(&lock);
+
+        if (strcmp(buffer, "1") == 0)
+        {
+            strcpy(buffer, "ROOM STATUS: ");
+
+            for (i = 0; i < ROOMS; i++)
+            {
+                char temp[20];
+
+                sprintf(temp, "Room %d:%s | ",
+                        i + 101,
+                        booked[i] ? "Booked" : "Available");
+
+                strcat(buffer, temp);
+            }
+
+            send_msg(sock, buffer);
+        }
+        else if (strcmp(buffer, "2") == 0)
+        {
+            receive_msg(sock, buffer);
+            sscanf(buffer, "%d %29s", &room, name);
+
+            if (room >= 101 && room <= 105)
+            {
+                i = room - 101;
+
+                if (!booked[i])
+                {
+                    booked[i] = 1;
+                    strcpy(customer[i], name);
+                    save_booking();
+
+                    sprintf(buffer, "Room %d booked successfully", room);
+                }
+                else
+                {
+                    sprintf(buffer, "Room %d is already booked", room);
+                }
+            }
+            else
+            {
+                strcpy(buffer, "Invalid room number");
+            }
+
+            send_msg(sock, buffer);
+        }
+        else if (strcmp(buffer, "3") == 0)
+        {
+            receive_msg(sock, buffer);
+            sscanf(buffer, "%d %29s", &room, name);
+
+            if (room >= 101 && room <= 105)
+            {
+                i = room - 101;
+
+                if (booked[i] && strcmp(customer[i], name) == 0)
+                {
+                    booked[i] = 0;
+                    strcpy(customer[i], "");
+                    save_booking();
+
+                    sprintf(buffer, "Room %d cancelled successfully", room);
+                }
+                else
+                {
+                    strcpy(buffer, "Booking not found for this customer");
+                }
+            }
+            else
+            {
+                strcpy(buffer, "Invalid room number");
+            }
+
+            send_msg(sock, buffer);
+        }
+        else if (strcmp(buffer, "4") == 0)
+        {
+            receive_msg(sock, name);
+
+            int found = 0;
+            strcpy(buffer, "YOUR BOOKINGS: ");
+
+            for (i = 0; i < ROOMS; i++)
+            {
+                if (booked[i] && strcmp(customer[i], name) == 0)
+                {
+                    char temp[20];
+                    sprintf(temp, "Room %d ", i + 101);
+                    strcat(buffer, temp);
+                    found = 1;
+                }
+            }
+
+            if (!found)
+                strcpy(buffer, "No bookings found");
+
+            send_msg(sock, buffer);
+        }
+        else
+        {
+            send_msg(sock, "Invalid choice");
+        }
+
+        char logmsg[100];
+        snprintf(logmsg, sizeof(logmsg), "Client request: %s", name);
+        log_activity(logmsg);
+
+        pthread_mutex_unlock(&lock);
+    }
+
+    close(sock);
+    return NULL;
+}
+
+int main()
+{
+    int server, client, opt = 1;
+    struct sockaddr_in addr;
+    pthread_t tid;
+
+    load_booking();
+
+    server = socket(AF_INET, SOCK_STREAM, 0);
+
+    setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(PORT);
+    addr.sin_addr.s_addr = INADDR_ANY;
+
+    bind(server, (struct sockaddr *)&addr, sizeof(addr));
+    listen(server, 5);
+
+    printf("Hotel Reservation Server Started...\n");
+
+    while (1)
+    {
+        client = accept(server, NULL, NULL);
+
+        int *p = malloc(sizeof(int));
+        *p = client;
+
+        pthread_create(&tid, NULL, client_handler, p);
+        pthread_detach(tid);
+
+        printf("New client connected...\n");
+    }
+
+    close(server);
+    return 0;
+}
+
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8081
+#define MAX 100
+
+void send_msg(int sock, char *msg)
+{
+    char buffer[MAX];
+    snprintf(buffer, sizeof(buffer), "%s\n", msg);
+    send(sock, buffer, strlen(buffer), 0);
+}
+
+void receive_msg(int sock, char *msg)
+{
+    int i = 0;
+    char ch;
+
+    while (i < MAX - 1)
+    {
+        if (recv(sock, &ch, 1, 0) <= 0)
+        {
+            msg[i] = '\0';
+            return;
+        }
+
+        if (ch == '\n')
+            break;
+
+        msg[i++] = ch;
+    }
+
+    msg[i] = '\0';
+}
+
+int main()
+{
+    int sock, choice, room;
+    struct sockaddr_in server;
+    char ip[20], name[30], buffer[MAX];
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    printf("Enter Server IP: ");
+    scanf("%19s", ip);
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(PORT);
+    inet_pton(AF_INET, ip, &server.sin_addr);
+
+    connect(sock, (struct sockaddr *)&server, sizeof(server));
+
+    receive_msg(sock, buffer);
+    printf("\n%s\n", buffer);
+
+    while (1)
+    {
+        printf("\n1. View Room Availability");
+        printf("\n2. Book Room");
+        printf("\n3. Cancel Reservation");
+        printf("\n4. View Booking Details");
+        printf("\n5. Exit");
+
+        printf("\nEnter Choice: ");
+        scanf("%d", &choice);
+
+        sprintf(buffer, "%d", choice);
+        send_msg(sock, buffer);
+
+        if (choice == 1)
+        {
+            receive_msg(sock, buffer);
+            printf("\n%s\n", buffer);
+        }
+        else if (choice == 2 || choice == 3)
+        {
+            printf("Enter Room Number (101-105): ");
+            scanf("%d", &room);
+
+            printf("Enter Customer Name: ");
+            scanf("%29s", name);
+
+            sprintf(buffer, "%d %s", room, name);
+            send_msg(sock, buffer);
+
+            receive_msg(sock, buffer);
+            printf("\n%s\n", buffer);
+        }
+        else if (choice == 4)
+        {
+            printf("Enter Customer Name: ");
+            scanf("%29s", name);
+
+            send_msg(sock, name);
+
+            receive_msg(sock, buffer);
+            printf("\n%s\n", buffer);
+        }
+        else if (choice == 5)
+        {
+            receive_msg(sock, buffer);
+            printf("%s\n", buffer);
+            break;
+        }
+        else
+        {
+            receive_msg(sock, buffer);
+            printf("%s\n", buffer);
+        }
+    }
+
+    close(sock);
+    return 0;
+}

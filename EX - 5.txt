@@ -1,0 +1,218 @@
+ECHO SERVER USING TCP
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8080
+
+int main()
+{
+    int server_fd, client_fd;
+    struct sockaddr_in server, client;
+    char buffer[100];
+
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(PORT);
+    server.sin_addr.s_addr = INADDR_ANY;
+
+    bind(server_fd, (struct sockaddr *)&server, sizeof(server));
+
+    listen(server_fd, 5);
+
+    printf("Echo Server Waiting for Client...\n");
+
+    int len = sizeof(client);
+    client_fd = accept(server_fd, (struct sockaddr *)&client, &len);
+
+    while (1)
+    {
+        memset(buffer, 0, sizeof(buffer));
+
+        int n = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+
+        if (n <= 0)
+            break;
+
+        buffer[n] = '\0';
+
+        printf("Client: %s\n", buffer);
+
+        send(client_fd, buffer, n, 0);
+
+        printf("Echo sent to client\n");
+    }
+
+    close(client_fd);
+    close(server_fd);
+
+    return 0;
+}
+
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8080
+
+int main()
+{
+    int sock;
+    struct sockaddr_in server;
+    char buffer[100];
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(PORT);
+    server.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    connect(sock, (struct sockaddr *)&server, sizeof(server));
+
+    while (1)
+    {
+        printf("Enter message: ");
+        fgets(buffer, sizeof(buffer), stdin);
+
+        send(sock, buffer, strlen(buffer), 0);
+
+        if (strncmp(buffer, "exit", 4) == 0)
+            break;
+
+        memset(buffer, 0, sizeof(buffer));
+
+        recv(sock, buffer, sizeof(buffer) - 1, 0);
+
+        printf("Echo from Server: %s", buffer);
+    }
+
+    close(sock);
+
+    return 0;
+}
+
+
+Palindrome in TCP
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8081
+
+int main()
+{
+    int server_fd, client_fd;
+    struct sockaddr_in server, client;
+    char str[100], result[100];
+    int i, flag;
+
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(PORT);
+    server.sin_addr.s_addr = INADDR_ANY;
+
+    bind(server_fd, (struct sockaddr *)&server, sizeof(server));
+
+    listen(server_fd, 5);
+
+    printf("Palindrome Server Waiting for Client...\n");
+
+    int len = sizeof(client);
+    client_fd = accept(server_fd, (struct sockaddr *)&client, &len);
+
+    while (1)
+    {
+        memset(str, 0, sizeof(str));
+
+        int n = recv(client_fd, str, sizeof(str) - 1, 0);
+
+        if (n <= 0)
+            break;
+
+        str[n] = '\0';
+
+        if (strcmp(str, "exit") == 0)
+            break;
+
+        flag = 1;
+
+        int j = strlen(str) - 1;
+
+        for (i = 0; i < j; i++, j--)
+        {
+            if (str[i] != str[j])
+            {
+                flag = 0;
+                break;
+            }
+        }
+
+        if (flag == 1)
+            strcpy(result, "Palindrome");
+        else
+            strcpy(result, "Not Palindrome");
+
+        send(client_fd, result, strlen(result), 0);
+
+        printf("String: %s\n", str);
+        printf("Result: %s\n", result);
+    }
+
+    close(client_fd);
+    close(server_fd);
+
+    return 0;
+}
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define PORT 8081
+
+int main()
+{
+    int sock;
+    struct sockaddr_in server;
+    char str[100], result[100];
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(PORT);
+    server.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    connect(sock, (struct sockaddr *)&server, sizeof(server));
+
+    while (1)
+    {
+        printf("Enter a string: ");
+        fgets(str, sizeof(str), stdin);
+
+        str[strcspn(str, "\n")] = '\0';
+
+        send(sock, str, strlen(str), 0);
+
+        if (strcmp(str, "exit") == 0)
+            break;
+
+        memset(result, 0, sizeof(result));
+
+        recv(sock, result, sizeof(result) - 1, 0);
+
+        printf("Server Result: %s\n", result);
+    }
+
+    close(sock);
+
+    return 0;
+}
